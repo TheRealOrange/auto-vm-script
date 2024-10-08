@@ -56,6 +56,8 @@ if ! sudo /usr/sbin/qm status $VMID &>/dev/null; then
     cat > "$USERDATA_FILE" <<EOF
 #cloud-config
 hostname: $VM_NAME
+fqdn: $VM_NAME.localdomain
+manage_etc_hosts: true
 users:
   - name: $USER
     sudo: ALL=(ALL) NOPASSWD:ALL
