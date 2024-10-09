@@ -6,7 +6,7 @@ This is mostly useful for sharing compute resources to users in a way which isol
 ## What does it do?
 
 #### `vm_login.sh`
-This script will redirect the user login to a VM, and it will spin up a new VM if there is no existing VM, transferring the correct ssh keys to the VM, obtaining the IP address to the VM, and redirecting the SSH connection.
+This script will redirect the user login to a VM, and it will spin up a new VM if there is no existing VM, transferring the correct ssh keys to the VM, obtaining the IP address to the VM, and redirecting the SSH connection using `nc` to proxy the connection. (This relies on the user having set an appropriate `ProxyCommand` in their SSH config file)
 
 #### `update_vm_template.sh`
 This script aids in keeping a VM template (`ID 9000`) up to date by creating a VM from it, updating the VM, and replacing the template with the updated VM.
@@ -32,6 +32,21 @@ Now, copy the scripts to `/usr/local/bin` and symlink `vm_login.sh` to `/usr/bin
 Run `sudo visudo -f /etc/sudoers.d/vm_users` and to it, add the contents of `sudoers.d/vm_users` to allow the `vmusers` group to run the necessary commands to create and start the VM.
 
 Open `/etc/ssh/sshd_config` and add the contents of `sshd_config` to the end of the file. This will run the `vm_login.sh` script for all users who match `vm_users_xx`.
+
+## Users
+To add users, you require a SSH public key of the user. Then, simply use the `add_new_user.sh` script to add a new user `vm_user_XX`. The user will have to add the following configuration to their local SSH config
+
+    Host jump_host
+        HostName <your server IP/URL here>
+        User vm_user_XX
+        AddKeysToAgent yes
+        IdentityFile <path_to_your_private_key_here>
+
+    Host docker_vm
+        ProxyCommand ssh -q jump_host
+        User vm_user_XX
+        AddKeysToAgent yes
+        IdentityFile <path_to_your_private_key_here>
 
 ## How it works
 

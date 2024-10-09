@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Threshold for inactivity in minutes
-INACTIVITY_THRESHOLD=15 # Adjust as needed
+INACTIVITY_THRESHOLD=20 # Adjust as needed
 
 CURRENT_TIME=$(date +%s)
 
@@ -21,11 +21,11 @@ for LAST_ACTIVE_FILE in /tmp/vm_*.last_active; do
     VMID=$(basename "$LAST_ACTIVE_FILE" | sed 's/vm_\([0-9]\+\)\.last_active/\1/')
     
     # Get the associated username
-    USER_NUM=${VMID#1}
+    USER_NUM=${VMID#2}
     USER="vm_user_${USER_NUM}"
     
     # Check if the user has any active SSH sessions
-    if lsof -i -n | grep -E "sshd.*ESTABLISHED.*$USER" > /dev/null; then
+    if /usr/bin/lsof -i -n | grep -E "sshd.*$USER.*(ESTABLISHED)" > /dev/null; then
         # User is currently logged in
         echo_info "User $USER is logged in; VM $VMID remains running."
         # Update last active time
@@ -39,13 +39,13 @@ for LAST_ACTIVE_FILE in /tmp/vm_*.last_active; do
     
     if [ "$INACTIVITY_TIME" -ge "$INACTIVITY_THRESHOLD" ]; then
         # Inactivity threshold exceeded; shut down VM if running
-        VM_STATUS=$(qm status "$VMID" | awk '{print $2}')
+        VM_STATUS=$(/usr/sbin/qm status "$VMID" | awk '{print $2}')
         if [ "$VM_STATUS" = "running" ]; then
             echo_info "Shutting down VM $VMID for user $USER due to $INACTIVITY_TIME minutes of inactivity."
-            qm shutdown "$VMID"
+            /usr/sbin/qm shutdown "$VMID"
             # Optional: Check if shutdown was successful
             sleep 5
-            if qm status "$VMID" | grep -q "running"; then
+            if /usr/sbin/qm status "$VMID" | grep -q "running"; then
                 echo_error "VM $VMID did not shut down properly."
             else
                 echo_info "VM $VMID has been shut down."

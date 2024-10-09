@@ -60,7 +60,6 @@ mkdir -p "$USER_SSH_DIR"
 
 # Define the directory to store SSH keys
 SSH_KEYS_DIR="$USER_SSH_DIR"/keys
-PRIVATE_KEY_PATH="${SSH_KEYS_DIR}/${USERNAME}_id"
 PUBLIC_KEY_PATH="${SSH_KEYS_DIR}/${USERNAME}_id.pub"
 
 # Create the directory for SSH keys if it doesn't exist
@@ -69,18 +68,17 @@ mkdir -p "$SSH_KEYS_DIR"
 # Add the public key to authorized_keys
 echo "$PUBKEY" > "$USER_SSH_DIR"/authorized_keys
 
+# Store the public key for importing into the VM
+touch $PUBLIC_KEY_PATH
+echo "$PUBKEY" > "$PUBLIC_KEY_PATH"
+
 # Set the appropriate permissions
 chown -R "$USERNAME":"$USERNAME" "$USER_SSH_DIR"
 chmod 700 "$USER_SSH_DIR"
 chmod 600 "$USER_SSH_DIR"/authorized_keys
 
-# Generate an SSH key pair for the user
-echo_info "Generating SSH key pair for $USERNAME..."
-ssh-keygen -t ed25519 -f "$PRIVATE_KEY_PATH" -N "" -C "${USERNAME}@proxmox"
-
 # Set appropriate permissions for the SSH keys
 chmod 700 "$SSH_KEYS_DIR"
-chmod 600 "$PRIVATE_KEY_PATH"
 chmod 644 "$PUBLIC_KEY_PATH"
 
 # Change ownership of the SSH keys directory
@@ -88,12 +86,5 @@ chown -R "$USERNAME":"$USERNAME" "$SSH_KEYS_DIR"
 
 # Provide the public key path for cloud-init integration
 echo_info "Public key for $USERNAME is available at $PUBLIC_KEY_PATH"
-echo_info "Private key for $USERNAME is securely stored at $PRIVATE_KEY_PATH"
-
-# Optionally, display the public key (for immediate use)
-echo_info "Public SSH Key for $USERNAME:"
-cat "$PUBLIC_KEY_PATH"
-
-echo_info "User $USERNAME has been created with SSH key pair generated."
 
 exit 0
