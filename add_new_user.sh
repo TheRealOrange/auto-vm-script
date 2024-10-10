@@ -5,21 +5,60 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
+LOCK_DIR="/var/lock/auto_vm"  # Directory to store lock and last active files
+LOG_DIR="/var/log/auto_vm"
+USER_LOG_FILE="${LOG_DIR}/user.log"
+LOGIN_LOG_FILE="${LOG_DIR}/vm_management.log"
+
+# Check if the script is run as root
+if [ "$EUID" -ne 0 ]; then
+    echo "\e[31m[ERROR]\e[0m Please run as root."
+    exit 1
+fi
+
+# Create the vmusers group if it does not exist
+if ! getent group vmusers > /dev/null; then
+    echo "\e[32m[INFO]\e[0m Creating group 'vmusers'..."
+    groupadd vmusers
+fi
+
+# Ensure LOG_DIR exists
+mkdir -p $LOG_DIR
+
+# Ensure log files exists with proper permissions
+touch "$USER_LOG_FILE"
+chmod 640 "$USER_LOG_FILE"
+
+touch "$LOGIN_LOG_FILE"
+chown root:vmusers "$LOGIN_LOG_FILE"
+chmod 660 "$LOGIN_LOG_FILE"
+
+# Ensure LOCK_DIR exists with proper permissions
+mkdir -p $LOCK_DIR
+chown root:vmusers "$LOCK_DIR"
+chmod 774 "$LOCK_DIR"
+
+# Function to display informational messages
+echo_info() {
+    local timestamp
+    timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+    echo -e "\e[32m[INFO]\e[0m $1"
+    flock -w 5 "$USER_LOG_FILE" -c "echo '[$timestamp][INFO] $1' >> \"$USER_LOG_FILE\""
+}
+
+# Function to display error messages
+echo_error() {
+    local timestamp
+    timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+    echo -e "\e[31m[ERROR]\e[0m $1" >&2
+    flock -w 5 "$USER_LOG_FILE" -c "echo '[$timestamp][ERROR] $1' >> \"$USER_LOG_FILE\""
+}
+
 # Function to display usage information
 usage() {
     echo "Usage: $0 username 'ssh-public-key'"
     echo "Example: $0 vm_user_00 'ssh-ed25519 AA...'"
     exit 1
-}
-
-# Function to display informational messages
-echo_info() {
-    echo -e "\e[32m[INFO]\e[0m $1"
-}
-
-# Function to display error messages
-echo_error() {
-    echo -e "\e[31m[ERROR]\e[0m $1" >&2
 }
 
 # Check if the correct number of arguments is provided
@@ -33,12 +72,6 @@ PUBKEY=$2
 # Validate username format
 if [[ ! "$USERNAME" =~ ^vm_user_[0-9]{2}$ ]]; then
     echo_error "Invalid username format. Username must be in the format vm_user_xx, where xx is a number 00-99."
-    exit 1
-fi
-
-# Check if the script is run as root
-if [ "$EUID" -ne 0 ]; then
-    echo_error "Please run as root."
     exit 1
 fi
 

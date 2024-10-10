@@ -2,18 +2,38 @@
 
 # Script to remove a vm_user_xx user and any associated VMs
 
+# Configuration Variables
+LOCK_DIR="/var/lock/auto_vm"  # Directory to store lock and last active files
+LOG_DIR="/var/log/auto_vm"
+USER_LOG_FILE="${LOG_DIR}/user.log"
+CLOUDINIT_DIR="/var/lib/vz/template/iso"
+
+# Ensure LOG_DIR exists
+mkdir -p $LOG_DIR
+
+# Ensure log files exists with proper permissions
+touch "$USER_LOG_FILE"
+chmod 640 "$USER_LOG_FILE"
+
 if [[ $# -ne 1 ]]; then
     echo "Usage: $0 username"
     exit 1
 fi
 
-# Function to display messages
-function echo_info {
+# Function to display informational messages
+echo_info() {
+    local timestamp
+    timestamp=$(date "+%Y-%m-%d %H:%M:%S")
     echo -e "\e[32m[INFO]\e[0m $1"
+    flock -w 5 "$USER_LOG_FILE" -c "echo '[$timestamp][INFO] $1' >> \"$USER_LOG_FILE\""
 }
 
-function echo_error {
+# Function to display error messages
+echo_error() {
+    local timestamp
+    timestamp=$(date "+%Y-%m-%d %H:%M:%S")
     echo -e "\e[31m[ERROR]\e[0m $1" >&2
+    flock -w 5 "$USER_LOG_FILE" -c "echo '[$timestamp][ERROR] $1' >> \"$USER_LOG_FILE\""
 }
 
 USERNAME=$1
@@ -104,7 +124,7 @@ else
 fi
 
 # Remove temporary files associated with the VM
-LAST_ACTIVE_FILE="/tmp/vm_${VMID}.last_active"
+LAST_ACTIVE_FILE="${LOCK_DIR}/vm_${VMID}.last_active"
 if [[ -f "$LAST_ACTIVE_FILE" ]]; then
     rm "$LAST_ACTIVE_FILE"
     if [[ $? -eq 0 ]]; then
@@ -114,7 +134,13 @@ if [[ -f "$LAST_ACTIVE_FILE" ]]; then
     fi
 fi
 
-CLOUDINIT_ISO="/var/lib/vz/template/iso/cloudinit_${VMID}.iso"
+LOCK_FILE="${LOCK_DIR}/vm_${VMID}.lock"
+if [[ -f "$LOCK_FILE" ]]; then
+    rm -f "$LOCK_FILE"
+    echo_info "Removed lock file $LOCK_FILE."
+fi
+
+CLOUDINIT_ISO="${CLOUDINIT_DIR}/cloudinit_${VMID}.iso"
 if [[ -f "$CLOUDINIT_ISO" ]]; then
     rm "$CLOUDINIT_ISO"
     if [[ $? -eq 0 ]]; then

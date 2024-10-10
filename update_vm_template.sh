@@ -3,19 +3,36 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
+LOG_DIR="/var/log/auto_vm"
+LOG_FILE="${LOG_DIR}/vm_update.log"
+
+# Ensure LOG_DIR exists
+mkdir -p $LOG_DIR
+
+# Ensure log files exists with proper permissions
+touch "$LOG_FILE"
+chmod 640 "$LOG_FILE"
+
 # Variables
 TEMPLATE_ID=9000
 TEMPLATE_NAME="debian-docker-template"
 TEMP_VM_ID=9999  # Temporary VM ID for updating
 TEMP_VM_NAME="template-update-vm"
 
-# Function to display messages
-function echo_info {
+# Function to display informational messages
+echo_info() {
+    local timestamp
+    timestamp=$(date "+%Y-%m-%d %H:%M:%S")
     echo -e "\e[32m[INFO]\e[0m $1"
+    flock -w 5 "$LOG_FILE" -c "echo '[$timestamp][INFO] $1' >> \"$LOG_FILE\""
 }
 
-function echo_error {
+# Function to display error messages
+echo_error() {
+    local timestamp
+    timestamp=$(date "+%Y-%m-%d %H:%M:%S")
     echo -e "\e[31m[ERROR]\e[0m $1" >&2
+    flock -w 5 "$LOG_FILE" -c "echo '[$timestamp][ERROR] $1' >> \"$LOG_FILE\""
 }
 
 # Check if the temporary VM already exists and remove it
@@ -98,8 +115,8 @@ history -c && rm -f ~/.bash_history
 cloud-init clean
 
 # Automate GRUB timeout adjustment
-# Replace GRUB_TIMEOUT value with 2, or append if not present
-sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=2/' /etc/default/grub || echo "GRUB_TIMEOUT=2" >> /etc/default/grub
+# Replace GRUB_TIMEOUT value with 1, or append if not present
+sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=1/' /etc/default/grub || echo "GRUB_TIMEOUT=1" >> /etc/default/grub
 
 # Update GRUB to apply changes
 update-grub
