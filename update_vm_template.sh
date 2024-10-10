@@ -168,4 +168,4 @@ qm template "$TEMPLATE_ID"
 echo_info "Destroying temporary VM (ID: $TEMP_VM_ID)..."
 qm destroy "$TEMP_VM_ID" --purge
 
-echo_info "Template '$TEMPLATE_NAME' (ID: $TEMPLATE_ID) has been successfully updated with GRUB timeout set to 2 seconds."
+echo_info "Template '$TEMPLATE_NAME' (ID: $TEMPLATE_ID) has been successfully updated."

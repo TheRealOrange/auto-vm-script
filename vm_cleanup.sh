@@ -47,7 +47,7 @@ get_vm_ip() {
 }
 
 # Prevent concurrent executions
-LOCKFILE="${LOCK_DIR}/vm_cleanup.lock"
+LOCKFILE="${LOCK_DIR}/cleanup.lock"
 
 if [ -e "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE")" 2>/dev/null; then
     echo_info "vm_cleanup.sh is already running. Exiting."
