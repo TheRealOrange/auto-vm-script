@@ -1,8 +1,0 @@
-# At the end of sshd_config, add:
-
-Match User vm_user_*
-    ForceCommand /usr/local/bin/vm_login.sh
-    X11Forwarding no
-    AllowTcpForwarding no
-    PermitTunnel no
-    GatewayPorts no

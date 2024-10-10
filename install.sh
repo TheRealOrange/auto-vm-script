@@ -15,6 +15,25 @@ CRON_FILE="/etc/cron.d/vm_cleanup"
 # Define the path to the logrotate config file
 LOGROTATE_CONFIG="/etc/logrotate.d/auto_vm"
 
+# Define the paths to the configuration templates
+SUDOERS_TEMPLATE="sudoers.d/vm_users.template"
+SSHD_TEMPLATE="sshd_config.vm_login.template"
+
+# Define the path to the sudoers.d file
+SUDOERS_FILE="/etc/sudoers.d/vm_users"
+
+# Define the path to the SSHD config
+SSHD_CONFIG="/etc/ssh/sshd_config"
+
+# Source the configuration file
+CONFIG_FILE="/etc/auto_vm/auto_vm_config.sh"
+if [[ -f "$CONFIG_FILE" ]]; then
+    source "$CONFIG_FILE"
+else
+    echo "Configuration file $CONFIG_FILE not found. Exiting."
+    exit 1
+fi
+
 # Function to display informational messages
 echo_info() {
     local message="$1"
@@ -32,6 +51,57 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Function to append SSH configurations
+append_sshd_config() {
+    local sshd_template="$1"
+    local sshd_config="$2"
+
+    # Check if the sudoers template exists
+    if [[ ! -f "$sshd_template" ]]; then
+        echo_error "SSHD config template file '$sshd_template' not found."
+        exit 1
+    fi
+
+    # Check if the configuration already exists to prevent duplication
+    if grep -Fq "Match User ${USER_PREFIX}*" "$sshd_config"; then
+        echo_info "SSH configuration for users with prefix '${USER_PREFIX}' already exists in $sshd_config. Skipping addition."
+    else
+        echo_info "Appending SSH configuration for users with prefix '${USER_PREFIX}' to $sshd_config..."
+        # Substitute variables using envsubst
+        envsubst < "$sshd_template" >> "$sshd_config"
+        echo_info "SSH configuration appended successfully."
+    fi
+}
+
+# Function to create sudoers.d/vm_users
+create_sudoers_file() {
+    local sudoers_template="$1"
+    local sudoers_file="$2"
+
+    # Check if the sudoers template exists
+    if [[ ! -f "$sudoers_template" ]]; then
+        echo_error "Sudoers template file '$sudoers_template' not found."
+        exit 1
+    fi
+
+    # Substitute variables using envsubst
+    echo_info "Configuring $sudoers_file..."
+    envsubst < "$sudoers_template" > "$sudoers_file"
+
+    # Set correct permissions
+    chmod 440 "$sudoers_file"
+
+    # Validate the sudoers file syntax
+    if visudo -cf "$sudoers_file"; then
+        echo_info "Sudoers configuration validated successfully."
+    else
+        echo_error "Sudoers configuration validation failed. Please check the file."
+        exit 1
+    fi
+
+    echo_info "Sudoers configuration created successfully at $sudoers_file."
+}
+
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 pushd "$SCRIPT_DIR" >/dev/null
 trap 'popd >/dev/null' EXIT
@@ -44,6 +114,7 @@ SCRIPTS=(
     "vm_cleanup.sh"
     "vm_login.sh"
 )
+
 echo_info "Updating package lists..."
 apt-get update -y
 
@@ -80,7 +151,11 @@ else
     echo_info "Group 'vmusers' already exists. Skipping creation."
 fi
 
-# Now setup the cron job to run cleanup every minute
+
+# ------------------------------
+# Adding the Cron Job
+# ------------------------------
+
 echo_info "Setting up cron job for vm_cleanup.sh to run every minute..."
 
 # Define the cron job line
@@ -105,18 +180,21 @@ fi
 chmod 644 "$CRON_FILE"
 
 # Ensure the vm_cleanup.log file exists and has appropriate permissions
-LOG_DIR="/var/log/auto_vm"
 mkdir -p "$LOG_DIR"
-touch "$LOG_DIR/vm_cleanup.log"
-chmod 644 "$LOG_DIR/vm_cleanup.log"
+touch "$VM_CLEANUP_LOG"
+chmod 644 "$VM_CLEANUP_LOG"
 
 echo_info "Cron job setup completed successfully."
 
-# Now, set up log rotation for the log files
+
+# ------------------------------
+# Adding logrotate Configuration
+# ------------------------------
+
 echo_info "Setting up log rotation for VM management logs..."
 
 # Define the logrotate configuration for logs
-LOGROTATE_CONTENT="/var/log/auto_vm/vm_management.log {
+LOGROTATE_CONTENT="${LOG_DIR}/vm_management.log {
     daily
     rotate 7
     compress
@@ -131,7 +209,7 @@ LOGROTATE_CONTENT="/var/log/auto_vm/vm_management.log {
     endscript
 }
 
-/var/log/auto_vm/*.log {
+${LOG_DIR}/*.log {
     daily
     rotate 7
     compress
@@ -158,6 +236,22 @@ fi
 
 echo_info "Log rotation setup completed successfully."
 
-echo_info "Installation completed successfully."
+# ------------------------------
+# Configuring sudoers file
+# ------------------------------
+
+echo_info "Configuring $SUDOERS_FILE..."
+
+create_sudoers_file "$SUDOERS_TEMPLATE" "$SUDOERS_FILE"
+
+# ------------------------------
+# Configuring SSHD
+# ------------------------------
+
+echo_info "Configuring SSHD to force vm_login.sh for users with prefix '${USER_PREFIX}'..."
+
+append_sshd_config "$USER_PREFIX" "$SSHD_CONFIG"
+
+echo_info "Installation completed successfully. Please restart SSHD to apply new configuration."
 
 exit 0

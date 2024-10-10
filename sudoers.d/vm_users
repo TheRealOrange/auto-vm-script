@@ -1,5 +1,0 @@
-# Allow vm_user_* users to run specific commands without a password
-
-Cmnd_Alias VM_CMDS = /usr/sbin/qm *, /usr/bin/cloud-localds *
-
-%vmusers ALL=(ALL) NOPASSWD: VM_CMDS

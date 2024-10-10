@@ -1,0 +1,9 @@
+# VM Management SSH Configuration block (DO NOT EDIT)
+Match User ${USER_PREFIX}*
+    ForceCommand vm_login.sh
+    X11Forwarding no
+    AllowTcpForwarding no
+    PermitTunnel no
+    GatewayPorts no
+
+# End of VM Management SSH Configuration block

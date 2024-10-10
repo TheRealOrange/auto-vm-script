@@ -21,6 +21,27 @@ if [[ "$EUID" -ne 0 ]]; then
     exit 1
 fi
 
+# Source the configuration file
+CONFIG_FILE="/etc/auto_vm/auto_vm_config.sh"
+if [[ -f "$CONFIG_FILE" ]]; then
+    source "$CONFIG_FILE"
+else
+    echo "Configuration file $CONFIG_FILE not found. Exiting."
+    exit 1
+fi
+
+# Path to the vm_cleanup cron file
+CRON_FILE="/etc/cron.d/vm_cleanup"
+
+# Define the path to the logrotate config file
+LOGROTATE_CONFIG="/etc/logrotate.d/auto_vm"
+
+# Path to the sudoers.d file
+SUDOERS_FILE="/etc/sudoers.d/vm_users"
+
+# Path to the SSHD config
+SSHD_CONFIG="/etc/ssh/sshd_config"
+
 # Function to remove a file if it exists
 remove_file() {
     local file="$1"
@@ -91,22 +112,45 @@ remove_logrotate_config() {
     fi
 }
 
-# Source the configuration file
-CONFIG_FILE="/etc/auto_vm/auto_vm_config.sh"
-if [[ -f "$CONFIG_FILE" ]]; then
-    source "$CONFIG_FILE"
-else
-    echo "Configuration file $CONFIG_FILE not found. Exiting."
-    exit 1
-fi
+# Function to remove the sudoers file
+remove_sudoers_file() {
+    local sudoers_file="$1"
+    if [[ -f "$sudoers_file" ]]; then
+        rm -f "$sudoers_file" && echo_info "Removed sudoers file: $sudoers_file"
+    else
+        echo_info "Sudoers file not found, skipping: $sudoers_file"
+    fi
+}
 
-# Path to the vm_cleanup cron file
-CRON_FILE="/etc/cron.d/vm_cleanup"
+# Function to remove SSH configurations using the template
+remove_sshd_config() {
+    local sshd_config="$1"
 
-# Define the path to the logrotate config file
-LOGROTATE_CONFIG="/etc/logrotate.d/auto_vm"
+    # Check if the configuration block exists in sshd_config
+    if grep -Fq "Match User ${USER_PREFIX}*" "$sshd_config"; then
+        echo_info "Removing SSH configuration for users with prefix '${USER_PREFIX}' from $sshd_config..."
+        # Use awk to remove the block between the marker comment and the last line
+        awk -v prefix="Match User ${USER_PREFIX}*" '
+            /# VM Management SSH Configuration block (DO NOT EDIT)/ {flag=1}
+            flag && $0 ~ prefix {next}
+            flag && $0 ~ /# End of VM Management SSH Configuration block/ {flag=0; next}
+            !flag
+            ' "$sshd_config" > "${sshd_config}.tmp" && mv "${sshd_config}.tmp" "$sshd_config"
+        echo_info "SSH configuration removed successfully."
+    else
+        echo_info "SSH configuration for users with prefix '${USER_PREFIX}' not found in $sshd_config. Skipping removal."
+    fi
+}
 
 echo_info "Starting uninstallation of VM management scripts..."
+
+# Remove sudoers.d/vm_users
+echo_info "Removing sudoers configuration for vm_users..."
+remove_sudoers_file "$SUDOERS_FILE"
+
+# Remove SSH configurations using the template
+echo_info "Removing SSH configurations..."
+remove_sshd_config "$SSHD_CONFIG"
 
 # Remove logrotate configurations
 echo_info "Removing logrotate configuration..."
@@ -177,6 +221,6 @@ remove_dir_if_empty "/etc/auto_vm"
 echo_info "Removing group vmusers if it's empty..."
 remove_group_if_empty vmusers
 
-echo_info "Uninstallation of VM management scripts completed successfully."
+echo_info "Uninstallation of VM management scripts completed successfully. Please restart SSHD to apply changes."
 
 exit 0
