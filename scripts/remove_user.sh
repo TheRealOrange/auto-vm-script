@@ -26,10 +26,14 @@ LOG_FILE="${VM_USER_LOG}"
 touch "$LOG_FILE"
 chmod 640 "$LOG_FILE"
 
-if [[ $# -ne 1 ]]; then
-    echo "Usage: $0 username"
+# Function to display usage information
+usage() {
+    echo "Usage: $0 [-f] username"
+    echo "Options:"
+    echo "  -f    Force removal without confirmation"
+    echo "Example: $0 -f ${USER_PREFIX}00"
     exit 1
-fi
+}
 
 # Function to display informational messages
 echo_info() {
@@ -46,6 +50,26 @@ echo_error() {
     echo -e "\e[31m[ERROR]\e[0m $1" >&2
     flock -w 5 "$LOG_FILE" -c "echo '[$timestamp][ERROR] $1' >> \"$LOG_FILE\""
 }
+
+# Parse command-line options
+FORCE=0
+while getopts ":f" opt; do
+    case $opt in
+        f)
+            FORCE=1
+            ;;
+        \?)
+            echo_error "Invalid option: -$OPTARG"
+            usage
+            ;;
+    esac
+done
+shift $((OPTIND -1))
+
+# Check if the correct number of arguments is provided
+if [[ $# -ne 1 ]]; then
+    usage
+fi
 
 USERNAME=$1
 
@@ -67,19 +91,21 @@ USER_NUM=${USERNAME##${USER_PREFIX}}
 # Define VMID based on the user number
 VMID="${VM_ID_START}${USER_NUM}"
 
-# Confirm deletion
-echo_info "WARNING: This action will permanently DELETE user '$USERNAME' and VM '$VMID'."
-read -p "Type 'yes' to confirm and proceed: " CONFIRM
+# If not forced, prompt for confirmation
+if [[ $FORCE -ne 1 ]]; then
+    echo_info "WARNING: This action will permanently DELETE user '$USERNAME' and VM '$VMID'."
+    read -p "Type 'yes' to confirm and proceed: " CONFIRM
 
-if [[ "${CONFIRM,,}" != "yes" ]]; then
-    echo_info "Operation canceled."
-    exit 0
+    if [[ "${CONFIRM,,}" != "yes" ]]; then
+        echo_info "Operation canceled."
+        exit 0
+    fi
 fi
 
-echo_info "Proceeding with deletion..."
+echo_info "Proceeding with deletion of user $USERNAME and VM $VMID..."
 
 # Terminate any processes owned by the user
-pkill -u "$USERNAME" 2>/dev/null
+pkill -u "$USERNAME" 2>/dev/null || echo_info "No running processes found for user $USERNAME."
 
 # Remove the user and their home directory
 USERDEL_OUTPUT=$(userdel -r "$USERNAME" 2>&1)

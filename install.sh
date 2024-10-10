@@ -13,6 +13,15 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Scripts Installed to /usr/local/bin
+SCRIPTS=(
+    "add_new_user.sh"
+    "remove_user.sh"
+    "update_vm_template.sh"
+    "vm_cleanup.sh"
+    "vm_login.sh"
+)
+
 apt-get install -y jq netcat lsof
 
 mkdir -p /etc/auto_vm/
@@ -20,11 +29,11 @@ cp ./config/auto_vm_config.sh /etc/auto_vm/
 chmod +x /etc/auto_vm/auto_vm_config.sh
 
 cp ./scripts/*.sh /usr/local/bin
-chmod +x /usr/local/bin/vm_login.sh
-chmod +x /usr/local/bin/vm_cleanup.sh
-chmod +x /usr/local/bin/add_new_user.sh
-chmod +x /usr/local/bin/remove_user.sh
-chmod +x /usr/local/bin/update_vm_template.sh
+
+for script in "${SCRIPTS[@]}"; do
+    chmod +x "/usr/local/bin/$script"
+done
+
 ln -s /usr/local/bin/vm_login.sh /usr/bin/vm_login.sh
 
 # Create the vmusers group if it does not exist
