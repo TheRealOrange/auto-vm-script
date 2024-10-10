@@ -63,8 +63,12 @@ VMID="2${USER_NUM}"
 # Define VM Name (replace underscores with hyphens)
 VM_NAME="user-vm-${VMID}"
 
+# Attempt to retrieve the VM status
+VM_STATUS=$(sudo /usr/sbin/qm status "$VMID" 2>/dev/null)
+STATUS_EXIT_CODE=$?
+
 # Check if the VM exists
-if ! sudo /usr/sbin/qm status $VMID &>/dev/null; then
+if [ $STATUS_EXIT_CODE -ne 0 ]; then
     echo_info "Spinning up new VM..."
     TEMPLATEID=9000
 
@@ -141,14 +145,16 @@ EOF
 
     wait_vm_start $VMID
 else
-    echo_info "Checking if VM is running..."
-    # Check if the VM is running; start it if necessary
-    VM_STATUS=$(sudo /usr/sbin/qm status "$VMID" | awk '{print $2}')
-    if [ "$VM_STATUS" != "running" ]; then
+    # Extract the status from the qm status output
+    CURRENT_STATE=$(echo "$VM_STATUS" | awk '{print $2}')
+    
+    if [ "$CURRENT_STATE" != "running" ]; then
         echo_info "Starting VM $VMID for user $USER..."
         sudo /usr/sbin/qm start "$VMID"
 
         wait_vm_start $VMID
+    else
+        echo_info "VM $VMID is already running."
     fi
 fi
 
