@@ -150,16 +150,16 @@ EOF
 
 # Function to clone the VM template
 clone_vm_template() {
-    local TEMPLATEID="$1"
+    local TEMPLATE_ID="$1"
     local VMID="$2"
     local VM_NAME="$3"
     local USER="$4"
 
-    echo_info "$USER: Cloning template ID $TEMPLATEID to VM ID $VMID with name $VM_NAME..."
-    sudo "$QM_CMD" clone "$TEMPLATEID" "$VMID" --name "$VM_NAME" --full 2>&1 | grep -v '^transferred'
+    echo_info "$USER: Cloning template ID $TEMPLATE_ID to VM ID $VMID with name $VM_NAME..."
+    sudo "$QM_CMD" clone "$TEMPLATE_ID" "$VMID" --name "$VM_NAME" --full 2>&1 | grep -v '^transferred'
 
     if [ $? -ne 0 ]; then
-        echo_error "$USER: Failed to clone VM $VMID from template $TEMPLATEID."
+        echo_error "$USER: Failed to clone VM $VMID from template $TEMPLATE_ID."
         exit 1
     fi
 
@@ -196,7 +196,7 @@ else
         create_cloudinit_files "$USER" "$VMID" "$VM_NAME" "$PUBKEY" "$CLOUDINIT_ISO" "$USERDATA_FILE" "$METADATA_FILE"
 
         # Clone the VM template
-        clone_vm_template "$TEMPLATEID" "$VMID" "$VM_NAME" "$USER"
+        clone_vm_template "$TEMPLATE_ID" "$VMID" "$VM_NAME" "$USER"
 
         # Attach the cloud-init ISO to the VM
         echo_info "$USER: Attaching cloud-init ISO to VM $VMID..."

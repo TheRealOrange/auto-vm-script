@@ -71,6 +71,26 @@ remove_group_if_empty() {
     fi
 }
 
+# Function to remove the cron job
+remove_cron_job() {
+    local cron_file="$1"
+    if [[ -f "$cron_file" ]]; then
+        rm -f "$cron_file" && echo_info "Removed cron job file: $cron_file"
+    else
+        echo_info "Cron job file not found, skipping: $cron_file"
+    fi
+}
+
+# Function to remove the logrotate configuration
+remove_logrotate_config() {
+    local logrotate_config="$1"
+    if [[ -f "$logrotate_config" ]]; then
+        rm -f "$logrotate_config" && echo_info "Removed logrotate configuration file: $logrotate_config"
+    else
+        echo_info "Logrotate configuration file not found, skipping: $logrotate_config"
+    fi
+}
+
 # Source the configuration file
 CONFIG_FILE="/etc/auto_vm/auto_vm_config.sh"
 if [[ -f "$CONFIG_FILE" ]]; then
@@ -80,15 +100,21 @@ else
     exit 1
 fi
 
+# Path to the vm_cleanup cron file
+CRON_FILE="/etc/cron.d/vm_cleanup"
+
+# Define the path to the logrotate config file
+LOGROTATE_CONFIG="/etc/logrotate.d/auto_vm"
+
 echo_info "Starting uninstallation of VM management scripts..."
 
-# Source the configuration file if it exists to get variable values
-if [[ -f "$CONFIG_FILE" ]]; then
-    source "$CONFIG_FILE"
-    echo_info "Sourced configuration from $CONFIG_FILE."
-else
-    echo_info "Configuration file $CONFIG_FILE not found. Using default paths."
-fi
+# Remove logrotate configurations
+echo_info "Removing logrotate configuration..."
+remove_logrotate_config "$LOGROTATE_CONFIG"
+
+# Remove cron job
+echo_info "Removing cron job for vm_cleanup.sh..."
+remove_cron_job "$CRON_FILE"
 
 # Scripts Installed to /usr/local/bin
 SCRIPTS=(
@@ -108,13 +134,15 @@ if [[ ! -x "$REMOVE_USER_SCRIPT" ]]; then
     exit 1
 fi
 
-echo_info "Starting removal of all managed users..."
+echo_info "Starting removal of all managed users, prefix: ${USER_PREFIX}..."
 
 # Iterate over all users matching the naming convention
-for USERNAME in $(compgen -c | grep -E "^${USER_PREFIX}[0-9]{2}$"); do
-    echo_info "Removing user: $USERNAME"
-    # Run remove_user.sh in force mode to bypass confirmation
-    "$REMOVE_USER_SCRIPT" -f "$USERNAME"
+getent passwd | grep -E "^${USER_PREFIX}[0-9]{2}:" | cut -d: -f1 | while read -r USERNAME; do
+    if [[ -n "$USERNAME" ]]; then
+        echo_info "Removing user: $USERNAME"
+        # Run remove_user.sh in force mode to bypass confirmation
+        "$REMOVE_USER_SCRIPT" -f "$USERNAME"
+    fi
 done
 
 echo_info "All managed users have been removed."
@@ -146,8 +174,8 @@ echo_info "Removing /etc/auto_vm/ directory if empty..."
 remove_dir_if_empty "/etc/auto_vm"
 
 # Remove the vmusers group if it exists and is empty
-echo_info "Removing group '$GROUP_NAME' if it's empty..."
-remove_group_if_empty "$GROUP_NAME"
+echo_info "Removing group vmusers if it's empty..."
+remove_group_if_empty vmusers
 
 echo_info "Uninstallation of VM management scripts completed successfully."
 

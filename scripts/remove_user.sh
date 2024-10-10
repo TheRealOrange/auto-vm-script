@@ -24,7 +24,7 @@ LOG_FILE="${VM_USER_LOG}"
 
 # Ensure log files exists with proper permissions
 touch "$LOG_FILE"
-chmod 640 "$LOG_FILE"
+chmod 644 "$LOG_FILE"
 
 # Function to display usage information
 usage() {

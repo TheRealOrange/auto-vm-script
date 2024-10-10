@@ -25,11 +25,11 @@ mkdir -p $LOG_DIR
 
 # Ensure log files exists with proper permissions
 touch "$VM_USER_LOG"
-chmod 640 "$VM_USER_LOG"
+chmod 644 "$VM_USER_LOG"
 
 touch "$VM_MANAGEMENT_LOG"
 chown root:vmusers "$VM_MANAGEMENT_LOG"
-chmod 660 "$VM_MANAGEMENT_LOG"
+chmod 664 "$VM_MANAGEMENT_LOG"
 
 # Ensure LOCK_DIR exists with proper permissions
 mkdir -p $LOCK_DIR

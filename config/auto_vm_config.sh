@@ -30,7 +30,7 @@ SLEEP_INTERVAL_SHUTDOWN=5        # Sleep interval for VM shutdown checks
 
 # Naming Conventions
 USER_PREFIX="vm_user_"
-VM_PREFIX="user-vm-2"
+VM_PREFIX="user-vm-"
 VM_ID_START="2" # Defined X by default such that the VMs number from X00, up to X99
 
 # Permissions
