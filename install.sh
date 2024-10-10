@@ -25,8 +25,12 @@ SUDOERS_FILE="/etc/sudoers.d/vm_users"
 # Define the path to the SSHD config
 SSHD_CONFIG="/etc/ssh/sshd_config"
 
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+pushd "$SCRIPT_DIR" >/dev/null
+trap 'popd >/dev/null' EXIT
+
 # Source the configuration file
-CONFIG_FILE="/etc/auto_vm/auto_vm_config.sh"
+CONFIG_FILE="./config/auto_vm_config.sh"
 if [[ -f "$CONFIG_FILE" ]]; then
     source "$CONFIG_FILE"
 else
@@ -67,8 +71,10 @@ append_sshd_config() {
         echo_info "SSH configuration for users with prefix '${USER_PREFIX}' already exists in $sshd_config. Skipping addition."
     else
         echo_info "Appending SSH configuration for users with prefix '${USER_PREFIX}' to $sshd_config..."
-        # Substitute variables using envsubst
-        envsubst < "$sshd_template" >> "$sshd_config"
+        # Substitute variables using sed
+        echo_info "Configuring $sudoers_file..."
+        sed -e "s|\${USER_PREFIX}|$USER_PREFIX|g" \
+            "$sshd_template" >> "$sshd_config"
         echo_info "SSH configuration appended successfully."
     fi
 }
@@ -84,9 +90,14 @@ create_sudoers_file() {
         exit 1
     fi
 
-    # Substitute variables using envsubst
+    echo_info "QM_CMD: $QM_CMD"
+    echo_info "CLOUD_LOCALDS_CMD: $CLOUD_LOCALDS_CMD"
+
+    # Substitute variables using sed
     echo_info "Configuring $sudoers_file..."
-    envsubst < "$sudoers_template" > "$sudoers_file"
+    sed -e "s|\${QM_CMD}|$QM_CMD|g" \
+        -e "s|\${CLOUD_LOCALDS_CMD}|$CLOUD_LOCALDS_CMD|g" \
+        "$sudoers_template" > "$sudoers_file"
 
     # Set correct permissions
     chmod 440 "$sudoers_file"
@@ -101,10 +112,6 @@ create_sudoers_file() {
 
     echo_info "Sudoers configuration created successfully at $sudoers_file."
 }
-
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-pushd "$SCRIPT_DIR" >/dev/null
-trap 'popd >/dev/null' EXIT
 
 # Scripts Installed to /usr/local/bin
 SCRIPTS=(
@@ -250,7 +257,7 @@ create_sudoers_file "$SUDOERS_TEMPLATE" "$SUDOERS_FILE"
 
 echo_info "Configuring SSHD to force vm_login.sh for users with prefix '${USER_PREFIX}'..."
 
-append_sshd_config "$USER_PREFIX" "$SSHD_CONFIG"
+append_sshd_config "$SSHD_TEMPLATE" "$SSHD_CONFIG"
 
 echo_info "Installation completed successfully. Please restart SSHD to apply new configuration."
 

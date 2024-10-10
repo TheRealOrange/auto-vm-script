@@ -131,7 +131,7 @@ remove_sshd_config() {
         echo_info "Removing SSH configuration for users with prefix '${USER_PREFIX}' from $sshd_config..."
         # Use awk to remove the block between the marker comment and the last line
         awk -v prefix="Match User ${USER_PREFIX}*" '
-            /# VM Management SSH Configuration block (DO NOT EDIT)/ {flag=1}
+            /# VM Management SSH Configuration block \(DO NOT EDIT\)/ {flag=1; next}
             flag && $0 ~ prefix {next}
             flag && $0 ~ /# End of VM Management SSH Configuration block/ {flag=0; next}
             !flag
