@@ -4,11 +4,16 @@
 # This script is intended to be run every minute via a cron job.
 # It manages VM lock files by ensuring they reflect the current state of VMs.
 
-# Configuration Variables
-LOCK_DIR="/var/lock/auto_vm"  # Directory to store lock and last active files
-LOG_DIR="/var/log/auto_vm"
-LOG_FILE="${LOG_DIR}/vm_cleanup.log"
-INACTIVITY_THRESHOLD=20          # Inactivity threshold in minutes
+# Source the configuration file
+CONFIG_FILE="/etc/auto_vm/auto_vm_config.sh"
+if [[ -f "$CONFIG_FILE" ]]; then
+    source "$CONFIG_FILE"
+else
+    echo "Configuration file $CONFIG_FILE not found. Exiting."
+    exit 1
+fi
+
+LOG_FILE="${VM_CLEANUP_LOG}"
 
 # Ensure LOCK_DIR exists with proper permissions
 mkdir -p $LOCK_DIR
@@ -41,7 +46,7 @@ get_vm_ip() {
     local VM_IP=""
 
     # Attempt to retrieve IP via qm guest exec
-    VM_IP=$(sudo /usr/sbin/qm guest exec "$VMID" -- ip -4 -o addr show | jq -r '.["out-data"]' | awk '!/ lo|127\.0\.0\.1 /{gsub(/\/.*/,"",$4); print $4; exit}')
+    VM_IP=$(sudo "$QM_CMD" guest exec "$VMID" -- ip -4 -o addr show | jq -r '.["out-data"]' | awk '!/ lo|127\.0\.0\.1 /{gsub(/\/.*/,"",$4); print $4; exit}')
 
     echo "$VM_IP"
 }
@@ -72,7 +77,7 @@ for LOCK_FILE in "$LOCK_DIR"/vm_*.lock; do
     VMID=$(basename "$LOCK_FILE" | sed 's/vm_\([0-9]\+\)\.lock/\1/')
 
     # Check if the VM exists and is running
-    VM_STATUS=$(sudo /usr/sbin/qm status "$VMID" 2>/dev/null || true)
+    VM_STATUS=$(sudo "$QM_CMD" status "$VMID" 2>/dev/null || true)
 
     if echo "$VM_STATUS" | grep -q "running"; then
         echo_info "VM $VMID is running. Lock file exists."
@@ -100,11 +105,11 @@ for LOCK_FILE in "$LOCK_DIR"/vm_*.lock; do
     LAST_ACTIVE_FILE="$LOCK_DIR/vm_${VMID}.last_active"
 
     # Get the associated username
-    USER_NUM=${VMID#2}
-    USER="vm_user_${USER_NUM}"
+    USER_NUM=${VMID#${VM_ID_START}}
+    USER="${USER_PREFIX}${USER_NUM}"
 
     # Check if the user has any active SSH sessions
-    if /usr/bin/lsof -i -n | grep -E "sshd.*$USER.*(ESTABLISHED)" > /dev/null; then
+    if $LSOF_CMD -i -n | grep -E "sshd.*$USER.*(ESTABLISHED)" > /dev/null; then
         # User is currently logged in
         echo_info "User $USER is logged in; VM $VMID remains running."
         # Update last active time
@@ -131,17 +136,17 @@ for LOCK_FILE in "$LOCK_DIR"/vm_*.lock; do
 
         # Attempt to gracefully shut down the VM in the background
         (
-            sudo /usr/sbin/qm shutdown "$VMID" && echo_info "Shutdown command issued for VM $VMID."
+            sudo "$QM_CMD" shutdown "$VMID" && echo_info "Shutdown command issued for VM $VMID."
 
             # Wait for the VM to shut down gracefully
-            SHUTDOWN_TIMEOUT=60  # seconds
-            SLEEP_INTERVAL=5
+            SHUTDOWN_TIMEOUT="$TOTAL_TIMEOUT_SHUTDOWN"  # seconds
+            SLEEP_INTERVAL="$SLEEP_INTERVAL_SHUTDOWN"
             ELAPSED=0
 
-            while sudo /usr/sbin/qm status "$VMID" | grep -q "running"; do
+            while sudo "$QM_CMD" status "$VMID" | grep -q "running"; do
                 if [ "$ELAPSED" -ge "$SHUTDOWN_TIMEOUT" ]; then
                     echo_error "VM $VMID did not shut down within $SHUTDOWN_TIMEOUT seconds. Forcing shutdown."
-                    sudo /usr/sbin/qm stop "$VMID"
+                    sudo "$QM_CMD" stop "$VMID"
                     break
                 fi
                 sleep "$SLEEP_INTERVAL"
@@ -149,7 +154,7 @@ for LOCK_FILE in "$LOCK_DIR"/vm_*.lock; do
             done
 
             # Verify shutdown
-            if sudo /usr/sbin/qm status "$VMID" | grep -q "running"; then
+            if sudo "$QM_CMD" status "$VMID" | grep -q "running"; then
                 echo_error "Failed to shut down VM $VMID."
             else
                 echo_info "VM $VMID has been shut down successfully."

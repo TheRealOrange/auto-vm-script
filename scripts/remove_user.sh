@@ -2,18 +2,23 @@
 
 # Script to remove a vm_user_xx user and any associated VMs
 
-# Configuration Variables
-LOCK_DIR="/var/lock/auto_vm"  # Directory to store lock and last active files
-LOG_DIR="/var/log/auto_vm"
-USER_LOG_FILE="${LOG_DIR}/user.log"
-CLOUDINIT_DIR="/var/lib/vz/template/iso"
+# Source the configuration file
+CONFIG_FILE="/etc/auto_vm/auto_vm_config.sh"
+if [[ -f "$CONFIG_FILE" ]]; then
+    source "$CONFIG_FILE"
+else
+    echo "Configuration file $CONFIG_FILE not found. Exiting."
+    exit 1
+fi
 
 # Ensure LOG_DIR exists
 mkdir -p $LOG_DIR
 
+LOG_FILE="${VM_USER_LOG}"
+
 # Ensure log files exists with proper permissions
-touch "$USER_LOG_FILE"
-chmod 640 "$USER_LOG_FILE"
+touch "$LOG_FILE"
+chmod 640 "$LOG_FILE"
 
 if [[ $# -ne 1 ]]; then
     echo "Usage: $0 username"
@@ -25,7 +30,7 @@ echo_info() {
     local timestamp
     timestamp=$(date "+%Y-%m-%d %H:%M:%S")
     echo -e "\e[32m[INFO]\e[0m $1"
-    flock -w 5 "$USER_LOG_FILE" -c "echo '[$timestamp][INFO] $1' >> \"$USER_LOG_FILE\""
+    flock -w 5 "$LOG_FILE" -c "echo '[$timestamp][INFO] $1' >> \"$LOG_FILE\""
 }
 
 # Function to display error messages
@@ -33,14 +38,14 @@ echo_error() {
     local timestamp
     timestamp=$(date "+%Y-%m-%d %H:%M:%S")
     echo -e "\e[31m[ERROR]\e[0m $1" >&2
-    flock -w 5 "$USER_LOG_FILE" -c "echo '[$timestamp][ERROR] $1' >> \"$USER_LOG_FILE\""
+    flock -w 5 "$LOG_FILE" -c "echo '[$timestamp][ERROR] $1' >> \"$LOG_FILE\""
 }
 
 USERNAME=$1
 
 # Validate username format
-if [[ ! "$USERNAME" =~ ^vm_user_[0-9]+$ ]]; then
-    echo_error "Invalid username format. Username must be in the format vm_user_xx, where xx is a number"
+if [[ ! "$USERNAME" =~ ^${USER_PREFIX}[0-9]+$ ]]; then
+    echo_error "Invalid username format. Username must be in the format ${USER_PREFIX}xx, where xx is a number"
     exit 1
 fi
 
@@ -57,10 +62,10 @@ if ! id "$USERNAME" &>/dev/null; then
 fi
 
 # Extract the numeric part of the username
-USER_NUM=${USERNAME##vm_user_}
+USER_NUM=${USER##${USER_PREFIX}}
 
 # Define VMID based on the user number
-VMID="2${USER_NUM}"
+VMID="${VM_ID_START}${USER_NUM}"
 
 # Confirm deletion
 echo_info "WARNING: This action will permanently DELETE user '$USERNAME' and VM '$VMID'."
@@ -86,23 +91,23 @@ else
 fi
 
 # Check if the VM exists
-if qm status "$VMID" &>/dev/null; then
+if "$QM_CMD" status "$VMID" &>/dev/null; then
     # Stop the VM if it is not already stopped
-    VM_STATUS=$(qm status "$VMID" | awk '{print $2}')
+    VM_STATUS=$("$QM_CMD" status "$VMID" | awk '{print $2}')
     if [[ "$VM_STATUS" != "stopped" && "$VM_STATUS" != "unknown" ]]; then
         echo_info "Stopping VM $VMID (current state: $VM_STATUS)..."
-        qm shutdown "$VMID"
+        "$QM_CMD" shutdown "$VMID"
         # Wait for the VM to shut down gracefully
-        TIMEOUT=60
-        SLEEP_INTERVAL=5
+        TIMEOUT="$TOTAL_TIMEOUT_SHUTDOWN"  # seconds
+        SLEEP_INTERVAL="$SLEEP_INTERVAL_SHUTDOWN"
         ELAPSED_TIME=0
 
-        while qm status "$VMID" | grep -qv "stopped"; do
+        while "$QM_CMD" status "$VMID" | grep -qv "stopped"; do
             sleep $SLEEP_INTERVAL
             ELAPSED_TIME=$((ELAPSED_TIME + SLEEP_INTERVAL))
             if [[ $ELAPSED_TIME -ge $TIMEOUT ]]; then
                 echo_info "VM did not shut down gracefully. Forcing shutdown..."
-                qm stop "$VMID"
+                "$QM_CMD" stop "$VMID"
                 # Wait for the VM to stop
                 sleep 5
                 break
@@ -112,7 +117,7 @@ if qm status "$VMID" &>/dev/null; then
 
     # Destroy the VM
     echo_info "Destroying VM $VMID..."
-    qm destroy "$VMID" --purge
+    "$QM_CMD" destroy "$VMID" --purge
     if [[ $? -eq 0 ]]; then
         echo_info "VM $VMID has been destroyed."
     else

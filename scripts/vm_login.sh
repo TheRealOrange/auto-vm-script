@@ -1,13 +1,15 @@
 #!/bin/bash
 
-# Configuration Variables
-LOCK_DIR="/var/lock/auto_vm"  # Directory to store lock and last active files
-CLOUDINIT_DIR="/var/lib/vz/template/iso"
-LOG_DIR="/var/log/auto_vm"
-LOG_FILE="${LOG_DIR}/vm_management.log"
+# Source the configuration file
+CONFIG_FILE="/etc/auto_vm/auto_vm_config.sh"
+if [[ -f "$CONFIG_FILE" ]]; then
+    source "$CONFIG_FILE"
+else
+    echo "Configuration file $CONFIG_FILE not found. Exiting."
+    exit 1
+fi
 
-USERDATA_DIR="/tmp"
-METADATA_DIR="/tmp"
+LOG_FILE="${VM_MANAGEMENT_LOG}"
 
 # Function to display informational messages
 echo_info() {
@@ -37,7 +39,7 @@ get_vm_ip() {
         echo_info "$USER: Retrieved VM IP from lock file: $VM_IP"
     else
         echo_info "$USER: Creating lock file for VM $VMID. Attempting to retrieve VM IP..."
-        VM_IP=$(sudo /usr/sbin/qm guest exec "$VMID" -- ip -4 -o addr show | jq -r '.["out-data"]' | awk '!/ lo|127\.0\.0\.1 /{gsub(/\/.*/,"",$4); print $4; exit}')
+        VM_IP=$(sudo "$QM_CMD" guest exec "$VMID" -- ip -4 -o addr show | jq -r '.["out-data"]' | awk '!/ lo|127\.0\.0\.1 /{gsub(/\/.*/,"",$4); print $4; exit}')
 
         if [[ -n "$VM_IP" ]]; then
             echo "$VM_IP" > "$LOCK_FILE"
@@ -55,14 +57,14 @@ get_vm_ip() {
 wait_vm_start() {
     local VMID="$1"
     local USER="$2"
-    local TOTAL_TIMEOUT=120  # Total timeout in seconds
-    local SLEEP_INTERVAL=2   # Interval between checks in seconds
+    local TOTAL_TIMEOUT="$TOTAL_TIMEOUT_VM_START"  # Total timeout in seconds
+    local SLEEP_INTERVAL="$SLEEP_INTERVAL_VM_START"   # Interval between checks in seconds
     local ELAPSED_TIME=0
 
     echo_info "$USER: Waiting for VM $VMID to become ready..."
     while [ "$ELAPSED_TIME" -lt "$TOTAL_TIMEOUT" ]; do
-        if sudo /usr/sbin/qm status "$VMID" | grep -q "running"; then
-            if sudo /usr/sbin/qm agent "$VMID" ping &>/dev/null; then
+        if sudo "$QM_CMD" status "$VMID" | grep -q "running"; then
+            if sudo "$QM_CMD" agent "$VMID" ping &>/dev/null; then
                 echo_info "$USER: VM $VMID is up and Guest Agent is available."
                 return 0
             else
@@ -82,21 +84,21 @@ wait_vm_start() {
 
 # Validate username format
 USER=$(whoami)
-if [[ ! "$USER" =~ ^vm_user_[0-9]+$ ]]; then
-    echo_error "Invalid user format. Expected format: vm_user_<number>"
+if [[ ! "$USER" =~ ^${USER_PREFIX}[0-9]+$ ]]; then
+    echo_error "Invalid user format. Expected format: ${USER_PREFIX}<number>"
     exit 1
 fi
 
 echo_info "Initiating connection process for user $USER..."
 
 # Extract the numeric part of the username
-USER_NUM=${USER##vm_user_}
+USER_NUM=${USER##${USER_PREFIX}}
 
 # Define VMID based on the user number
-VMID="2${USER_NUM}"
+VMID="${VM_ID_START}${USER_NUM}"
 
-# Define VM Name (replace underscores with hyphens)
-VM_NAME="user-vm-${VMID}"
+# Define VM Name (replace underscores with hyphens if necessary)
+VM_NAME="${VM_PREFIX}${VMID}"
 
 # Define paths for lock and last active files
 LOCK_FILE="${LOCK_DIR}/vm_${VMID}.lock"
@@ -143,7 +145,7 @@ EOF
     wait  # Ensure both background jobs are completed
 
     echo_info "$USER: Generating cloud-init ISO for VM $VMID..."
-    sudo /usr/bin/cloud-localds "$CLOUDINIT_ISO" "$USERDATA_FILE" "$METADATA_FILE"
+    sudo "$CLOUD_LOCALDS_CMD" "$CLOUDINIT_ISO" "$USERDATA_FILE" "$METADATA_FILE"
 }
 
 # Function to clone the VM template
@@ -154,7 +156,7 @@ clone_vm_template() {
     local USER="$4"
 
     echo_info "$USER: Cloning template ID $TEMPLATEID to VM ID $VMID with name $VM_NAME..."
-    sudo /usr/sbin/qm clone "$TEMPLATEID" "$VMID" --name "$VM_NAME" --full 2>&1 | grep -v '^transferred'
+    sudo "$QM_CMD" clone "$TEMPLATEID" "$VMID" --name "$VM_NAME" --full 2>&1 | grep -v '^transferred'
 
     if [ $? -ne 0 ]; then
         echo_error "$USER: Failed to clone VM $VMID from template $TEMPLATEID."
@@ -172,13 +174,11 @@ else
     echo_info "$USER: Lock file does not exist for VM $VMID. Checking VM status..."
     
     # Attempt to retrieve the VM status
-    VM_STATUS=$(sudo /usr/sbin/qm status "$VMID" 2>/dev/null)
+    VM_STATUS=$(sudo "$QM_CMD" status "$VMID" 2>/dev/null)
     STATUS_EXIT_CODE=$?
     
     if [ "$STATUS_EXIT_CODE" -ne 0 ]; then
         echo_info "$USER: VM $VMID does not exist. Proceeding to create a new VM."
-
-        TEMPLATEID=9000
 
         # Retrieve the user's public key from the host
         PUBKEYFILE="/home/${USER}/.ssh/keys/${USER}_id.pub"
@@ -200,15 +200,15 @@ else
 
         # Attach the cloud-init ISO to the VM
         echo_info "$USER: Attaching cloud-init ISO to VM $VMID..."
-        sudo /usr/sbin/qm set "$VMID" --ide2 "local:iso/$(basename "$CLOUDINIT_ISO")",media=cdrom
+        sudo "$QM_CMD" set "$VMID" --ide2 "local:iso/$(basename "$CLOUDINIT_ISO")",media=cdrom
 
         # Enable QEMU Guest Agent
         echo_info "$USER: Enabling QEMU Guest Agent for VM $VMID..."
-        sudo /usr/sbin/qm set "$VMID" --agent enabled=1
+        sudo "$QM_CMD" set "$VMID" --agent enabled=1
 
         # Start the VM
         echo_info "$USER: Starting VM $VMID..."
-        sudo /usr/sbin/qm start "$VMID"
+        sudo "$QM_CMD" start "$VMID"
 
         # Clean up temporary files
         rm -f "$USERDATA_FILE" "$METADATA_FILE"
@@ -221,7 +221,7 @@ else
 
         if [ "$CURRENT_STATE" != "running" ]; then
             echo_info "$USER: VM $VMID is not running. Starting VM..."
-            sudo /usr/sbin/qm start "$VMID"
+            sudo "$QM_CMD" start "$VMID"
 
             # Wait for the VM to start and become ready
             wait_vm_start "$VMID" "$USER"
@@ -241,11 +241,11 @@ echo_info "$USER: VM $VMID has IP address $VM_IP."
 
 # Wait until SSH is available on the VM
 echo_info "$USER: Waiting for SSH to be available on VM $VMID at IP $VM_IP..."
-TOTAL_TIMEOUT=60  # Total timeout in seconds
-SLEEP_INTERVAL=1  # Interval between checks in seconds
+TOTAL_TIMEOUT="$TOTAL_TIMEOUT_SSH"  # Total timeout in seconds
+SLEEP_INTERVAL="$SLEEP_INTERVAL_SSH"  # Interval between checks in seconds
 ELAPSED_TIME=0
 
-while ! nc -z $VM_IP 22; do
+while ! "$NC_CMD" -z "$VM_IP" 22; do
     if [ "$ELAPSED_TIME" -ge "$TOTAL_TIMEOUT" ]; then
         echo_error "$USER: SSH service not available on VM $VMID at IP $VM_IP within $TOTAL_TIMEOUT seconds."
         exit 1
@@ -259,4 +259,4 @@ echo_info "$USER: SSH is available on VM $VMID at IP $VM_IP."
 # Update last active time
 touch "$LAST_ACTIVE_FILE"
 
-exec nc -q0 $VM_IP 22
+exec "$NC_CMD" -q0 "$VM_IP" 22

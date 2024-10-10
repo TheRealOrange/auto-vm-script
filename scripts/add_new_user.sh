@@ -5,10 +5,14 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
-LOCK_DIR="/var/lock/auto_vm"  # Directory to store lock and last active files
-LOG_DIR="/var/log/auto_vm"
-USER_LOG_FILE="${LOG_DIR}/user.log"
-LOGIN_LOG_FILE="${LOG_DIR}/vm_management.log"
+# Source the configuration file
+CONFIG_FILE="/etc/auto_vm/auto_vm_config.sh"
+if [[ -f "$CONFIG_FILE" ]]; then
+    source "$CONFIG_FILE"
+else
+    echo "Configuration file $CONFIG_FILE not found. Exiting."
+    exit 1
+fi
 
 # Check if the script is run as root
 if [ "$EUID" -ne 0 ]; then
@@ -16,34 +20,30 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Create the vmusers group if it does not exist
-if ! getent group vmusers > /dev/null; then
-    echo "\e[32m[INFO]\e[0m Creating group 'vmusers'..."
-    groupadd vmusers
-fi
-
 # Ensure LOG_DIR exists
 mkdir -p $LOG_DIR
 
 # Ensure log files exists with proper permissions
-touch "$USER_LOG_FILE"
-chmod 640 "$USER_LOG_FILE"
+touch "$VM_USER_LOG"
+chmod 640 "$VM_USER_LOG"
 
-touch "$LOGIN_LOG_FILE"
-chown root:vmusers "$LOGIN_LOG_FILE"
-chmod 660 "$LOGIN_LOG_FILE"
+touch "$VM_MANAGEMENT_LOG"
+chown root:vmusers "$VM_MANAGEMENT_LOG"
+chmod 660 "$VM_MANAGEMENT_LOG"
 
 # Ensure LOCK_DIR exists with proper permissions
 mkdir -p $LOCK_DIR
 chown root:vmusers "$LOCK_DIR"
 chmod 774 "$LOCK_DIR"
 
+LOG_FILE="${VM_USER_LOG}"
+
 # Function to display informational messages
 echo_info() {
     local timestamp
     timestamp=$(date "+%Y-%m-%d %H:%M:%S")
     echo -e "\e[32m[INFO]\e[0m $1"
-    flock -w 5 "$USER_LOG_FILE" -c "echo '[$timestamp][INFO] $1' >> \"$USER_LOG_FILE\""
+    flock -w 5 "$LOG_FILE" -c "echo '[$timestamp][INFO] $1' >> \"$LOG_FILE\""
 }
 
 # Function to display error messages
@@ -51,13 +51,13 @@ echo_error() {
     local timestamp
     timestamp=$(date "+%Y-%m-%d %H:%M:%S")
     echo -e "\e[31m[ERROR]\e[0m $1" >&2
-    flock -w 5 "$USER_LOG_FILE" -c "echo '[$timestamp][ERROR] $1' >> \"$USER_LOG_FILE\""
+    flock -w 5 "$LOG_FILE" -c "echo '[$timestamp][ERROR] $1' >> \"$LOG_FILE\""
 }
 
 # Function to display usage information
 usage() {
     echo "Usage: $0 username 'ssh-public-key'"
-    echo "Example: $0 vm_user_00 'ssh-ed25519 AA...'"
+    echo "Example: $0 ${USER_PREFIX}00 'ssh-ed25519 AA...'"
     exit 1
 }
 
@@ -70,8 +70,8 @@ USERNAME=$1
 PUBKEY=$2
 
 # Validate username format
-if [[ ! "$USERNAME" =~ ^vm_user_[0-9]{2}$ ]]; then
-    echo_error "Invalid username format. Username must be in the format vm_user_xx, where xx is a number 00-99."
+if [[ ! "$USERNAME" =~ ^${USER_PREFIX}[0-9]{2}$ ]]; then
+    echo_error "Invalid username format. Username must be in the format ${USER_PREFIX}xx, where xx is a number 00-99."
     exit 1
 fi
 
