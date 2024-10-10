@@ -37,6 +37,19 @@ echo_error() {
     flock -w 5 "$LOG_FILE" -c "echo '[$timestamp][ERROR] $1' >> \"$LOG_FILE\""
 }
 
+# Prevent concurrent executions
+LOCKFILE="${LOCK_DIR}/update.lock"
+
+if [ -e "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE")" 2>/dev/null; then
+    echo_info "update_vm_template.sh is already running. Exiting."
+    exit 0
+fi
+
+echo $$ > "$LOCKFILE"
+
+# Ensure the lock file is removed upon script exit
+trap 'rm -f "$LOCKFILE"; exit' EXIT
+
 # Check if the temporary VM already exists and remove it
 if "$QM_CMD" status "$TEMP_VM_ID" &>/dev/null; then
     echo_info "Removing existing temporary VM (ID: $TEMP_VM_ID)..."

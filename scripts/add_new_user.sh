@@ -5,18 +5,18 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
+# Check if the script is run as root
+if [ "$EUID" -ne 0 ]; then
+    echo "Please run as root"
+    exit 1
+fi
+
 # Source the configuration file
 CONFIG_FILE="/etc/auto_vm/auto_vm_config.sh"
 if [[ -f "$CONFIG_FILE" ]]; then
     source "$CONFIG_FILE"
 else
     echo "Configuration file $CONFIG_FILE not found. Exiting."
-    exit 1
-fi
-
-# Check if the script is run as root
-if [ "$EUID" -ne 0 ]; then
-    echo "\e[31m[ERROR]\e[0m Please run as root."
     exit 1
 fi
 

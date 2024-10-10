@@ -84,7 +84,7 @@ wait_vm_start() {
 
 # Validate username format
 USER=$(whoami)
-if [[ ! "$USER" =~ ^${USER_PREFIX}[0-9]+$ ]]; then
+if [[ ! "$USER" =~ ^${USER_PREFIX}[0-9]{2}$ ]]; then
     echo_error "Invalid user format. Expected format: ${USER_PREFIX}<number>"
     exit 1
 fi

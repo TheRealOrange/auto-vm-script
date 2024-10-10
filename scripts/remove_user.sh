@@ -2,6 +2,12 @@
 
 # Script to remove a vm_user_xx user and any associated VMs
 
+# Check if the script is run as root
+if [ "$EUID" -ne 0 ]; then
+    echo "Please run as root"
+    exit 1
+fi
+
 # Source the configuration file
 CONFIG_FILE="/etc/auto_vm/auto_vm_config.sh"
 if [[ -f "$CONFIG_FILE" ]]; then
@@ -44,14 +50,8 @@ echo_error() {
 USERNAME=$1
 
 # Validate username format
-if [[ ! "$USERNAME" =~ ^${USER_PREFIX}[0-9]+$ ]]; then
+if [[ ! "$USERNAME" =~ ^${USER_PREFIX}[0-9]{2}$ ]]; then
     echo_error "Invalid username format. Username must be in the format ${USER_PREFIX}xx, where xx is a number"
-    exit 1
-fi
-
-# Check if the script is run as root
-if [ "$EUID" -ne 0 ]; then
-    echo_error "Please run as root"
     exit 1
 fi
 
@@ -62,7 +62,7 @@ if ! id "$USERNAME" &>/dev/null; then
 fi
 
 # Extract the numeric part of the username
-USER_NUM=${USER##${USER_PREFIX}}
+USER_NUM=${USERNAME##${USER_PREFIX}}
 
 # Define VMID based on the user number
 VMID="${VM_ID_START}${USER_NUM}"
@@ -71,7 +71,7 @@ VMID="${VM_ID_START}${USER_NUM}"
 echo_info "WARNING: This action will permanently DELETE user '$USERNAME' and VM '$VMID'."
 read -p "Type 'yes' to confirm and proceed: " CONFIRM
 
-if [[ "$CONFIRM" != "yes" ]]; then
+if [[ "${CONFIRM,,}" != "yes" ]]; then
     echo_info "Operation canceled."
     exit 0
 fi
