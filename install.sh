@@ -119,7 +119,7 @@ echo_info "Updating package lists..."
 apt-get update -y
 
 echo_info "Installing necessary dependencies..."
-apt-get install -y jq lsof
+apt-get install -y jq lsof sudo
 
 echo_info "Creating configuration directory /etc/auto_vm/..."
 mkdir -p /etc/auto_vm/

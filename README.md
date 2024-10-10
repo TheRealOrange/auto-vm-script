@@ -21,17 +21,25 @@ It adds a new user given a username in the format `vm_user_xx` and a public key.
 Removes a specified user and cleans up any associated VMs.
 
 ## Setup
-Ensure you have Proxmox VE installed, and you have configured a VM template with `ID 9000`, which has `cloud-init`, `qemu-guest-agent`, and `ssh` installed and enabled to run on startup.
+Ensure you have Proxmox VE installed, and you have configured a VM template with `ID 9000` (or one that matches the constant in `config/auto_vm_config.sh`), which has `cloud-init`, `qemu-guest-agent`, and `ssh` installed and enabled to run on startup.
 
-Then, ensure your Proxmox VE instance has `jq` for JSON parsing and `sudo` for access control for the VM users.
+Set all the necessary constants in `config/auto_vm_config.sh` as per your needs.
 
-Additionally create the group `vmusers`.
+Then, ensure your Proxmox VE instance has `nc` for proxying ssh.
 
-Now, copy the scripts to `/usr/local/bin` and symlink `vm_login.sh` to `/usr/bin/vm_login.sh` such that it is accessible via the `rbash` restricted shell available to the users.
+Run the install script `install.sh` as root, which will do the following
+- install the dependencies `lsof`, `jq`, and `sudo`
+- copy the configuration file to `/etc/auto_vm/auto_vm_config.sh`
+- copy the scripts under `scripts` to `/usr/local/bin`
+- makes the scripts executable
+- symlinks `/usr/local/bin/vm_login.sh` to `/usr/bin/vm_login.sh` such that it can be accesed from a `rbash` shell
+- create the group `vmusers`
+- setup a cron job to run `vm_cleanup.sh` every minute
+- setup a logrotate config to manage the log files generated
+- add the `/etc/sudoers.d/vm_users` file to include the of `sudoers.d/vm_users.template` to allow the `vmusers` group to run the necessary commands to create and start the VM.
+- add the contents of `sshd_config.vm_login.template` to the end of your `/etc/ssh/sshd_config` file. This will run the `vm_login.sh` script for all users who match the specified `USER_PREFIX`.
 
-Run `sudo visudo -f /etc/sudoers.d/vm_users` and to it, add the contents of `sudoers.d/vm_users` to allow the `vmusers` group to run the necessary commands to create and start the VM.
-
-Open `/etc/ssh/sshd_config` and add the contents of `sshd_config` to the end of the file. This will run the `vm_login.sh` script for all users who match `vm_users_xx`.
+The `remove.sh` script will undo most of these and remove logs, except the apt packages will not be removed.
 
 ## Users
 To add users, you require a SSH public key of the user. Then, simply use the `add_new_user.sh` script to add a new user `vm_user_XX`. The user will have to add the following configuration to their local SSH config
