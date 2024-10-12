@@ -39,7 +39,17 @@ get_vm_ip() {
         echo_info "$USER: Retrieved VM IP from lock file: $VM_IP"
     else
         echo_info "$USER: Creating lock file for VM $VMID. Attempting to retrieve VM IP..."
-        VM_IP=$(sudo "$QM_CMD" guest exec "$VMID" -- ip -4 -o addr show | jq -r '.["out-data"]' | awk '!/ lo|127\.0\.0\.1 /{gsub(/\/.*/,"",$4); print $4; exit}')
+        VM_IP=$(
+            sudo "$QM_CMD" guest cmd 200 network-get-interfaces | jq -r '
+                limit(1;
+                    .[] 
+                    | select(.name != "lo") 
+                    | .["ip-addresses"][] 
+                    | select(.["ip-address-type"] == "ipv4") 
+                    | .["ip-address"]
+                )
+            '
+        )
 
         if [[ -n "$VM_IP" ]]; then
             echo "$VM_IP" > "$LOCK_FILE"

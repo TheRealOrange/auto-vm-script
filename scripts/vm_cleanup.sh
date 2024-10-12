@@ -46,8 +46,18 @@ get_vm_ip() {
     local VM_IP=""
 
     # Attempt to retrieve IP via qm guest exec
-    VM_IP=$(sudo "$QM_CMD" guest exec "$VMID" -- ip -4 -o addr show | jq -r '.["out-data"]' | awk '!/ lo|127\.0\.0\.1 /{gsub(/\/.*/,"",$4); print $4; exit}')
-
+    VM_IP=$(
+        sudo "$QM_CMD" guest cmd 200 network-get-interfaces | jq -r '
+            limit(1;
+                .[] 
+                | select(.name != "lo") 
+                | .["ip-addresses"][] 
+                | select(.["ip-address-type"] == "ipv4") 
+                | .["ip-address"]
+            )
+        '
+    )
+    
     echo "$VM_IP"
 }
 
