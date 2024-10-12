@@ -40,7 +40,7 @@ get_vm_ip() {
     else
         echo_info "$USER: Creating lock file for VM $VMID. Attempting to retrieve VM IP..."
         VM_IP=$(
-            sudo "$QM_CMD" guest cmd 200 network-get-interfaces | jq -r '
+            sudo "$QM_CMD" guest cmd $VM_IP network-get-interfaces | jq -r '
                 limit(1;
                     .[] 
                     | select(.name != "lo") 
@@ -144,6 +144,11 @@ ssh_pwauth: False
 disable_root: True
 ssh:
   allow_tcp_forwarding: true
+runcmd:
+  - apt-get update
+  - apt-get install -y cloud-guest-utils
+  - growpart /dev/vda 1
+  - resize2fs /dev/vda1
 EOF
 
     # Create meta-data file in background
@@ -165,11 +170,18 @@ clone_vm_template() {
     local VM_NAME="$3"
     local USER="$4"
 
-    echo_info "$USER: Cloning template ID $TEMPLATE_ID to VM ID $VMID with name $VM_NAME..."
+    echo_info "$USER: Cloning template ID $TEMPLATE_ID to VM ID $VMID with name $VM_NAME, and resizing $VM_DISK_ID to $USER_VM_DISK_SIZE..."
     sudo "$QM_CMD" clone "$TEMPLATE_ID" "$VMID" --name "$VM_NAME" --full 2>&1 | grep -v '^transferred'
 
     if [ $? -ne 0 ]; then
         echo_error "$USER: Failed to clone VM $VMID from template $TEMPLATE_ID."
+        exit 1
+    fi
+
+    sudo "$QM_CMD" resize $VMID $VM_DISK_ID $USER_VM_DISK_SIZE
+
+    if [ $? -ne 0 ]; then
+        echo_error "$USER: Failed to resize VM $VMID disk $VM_DISK_ID to $USER_VM_DISK_SIZE"
         exit 1
     fi
 

@@ -18,6 +18,8 @@ TEMPLATE_ID=9000
 TEMPLATE_NAME="debian-docker-template"
 TEMP_VM_ID=9999  # Temporary VM ID for updating
 TEMP_VM_NAME="template-update-vm"
+VM_DISK_ID="virtio0"
+USER_VM_DISK_SIZE="64G" # Ensure this is larger than the template disk size
 
 # Timeout Settings THESE CAN BE EDITED AFTER INSTALLING
 INACTIVITY_THRESHOLD=20          # Inactivity threshold in minutes

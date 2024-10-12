@@ -47,7 +47,7 @@ get_vm_ip() {
 
     # Attempt to retrieve IP via qm guest exec
     VM_IP=$(
-        sudo "$QM_CMD" guest cmd 200 network-get-interfaces | jq -r '
+        sudo "$QM_CMD" guest cmd $VM_IP network-get-interfaces | jq -r '
             limit(1;
                 .[] 
                 | select(.name != "lo") 
@@ -57,7 +57,7 @@ get_vm_ip() {
             )
         '
     )
-    
+
     echo "$VM_IP"
 }
 
