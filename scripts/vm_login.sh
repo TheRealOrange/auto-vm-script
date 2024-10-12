@@ -144,11 +144,14 @@ ssh_pwauth: False
 disable_root: True
 ssh:
   allow_tcp_forwarding: true
-runcmd:
-  - apt-get update
-  - apt-get install -y cloud-guest-utils
-  - growpart /dev/vda 1
-  - resize2fs /dev/vda1
+
+package_update: true
+package_upgrade: true
+
+growpart:
+  mode: auto
+  devices: ['/']
+resizefs: true
 EOF
 
     # Create meta-data file in background
