@@ -40,7 +40,7 @@ get_vm_ip() {
     else
         echo_info "$USER: Creating lock file for VM $VMID. Attempting to retrieve VM IP..."
         VM_IP=$(
-            sudo "$QM_CMD" guest cmd $VM_IP network-get-interfaces | jq -r '
+            sudo "$QM_CMD" guest cmd $VMID network-get-interfaces | jq -r '
                 limit(1;
                     .[] 
                     | select(.name != "lo") 
